@@ -1,0 +1,18 @@
+[Unit]
+Description=Licenzium landing: lead forms to email (SMTP Mail.ru)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/licenzium/mail.env
+ExecStart=/usr/bin/python3 /opt/licenzium/mailer.py
+Restart=on-failure
+RestartSec=5
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
