@@ -1,9 +1,10 @@
 (function () {
   'use strict';
 
-  /* НАСТРОЙКА. Укажите адрес обработчика заявок (POST, JSON).
-     Пока адрес пустой, форма работает в демо-режиме и заявки никуда не уходят. */
-  var CONFIG = { endpoint: '' };
+  /* Адрес обработчика заявок берётся из <meta name="lead-endpoint"> в index.html.
+     Пока он пустой, формы работают в демо-режиме и заявки никуда не уходят. */
+  var endpointMeta = document.querySelector('meta[name="lead-endpoint"]');
+  var CONFIG = { endpoint: endpointMeta ? endpointMeta.content.trim() : '' };
 
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var $ = function (id) { return document.getElementById(id); };
@@ -269,14 +270,14 @@
   }
   function resultHTML(title, text, demo) {
     return '<div class="result-msg" tabindex="-1">' + icon('seal-check') + '<h3>' + title + '</h3><p>' + text + '</p>' +
-      (demo ? '<p class="demo">Демо-режим: заявка сформирована, но не отправлена. Укажите адрес обработчика в assets/js/main.js.</p>' : '') + '</div>';
+      (demo ? '<p class="demo">Демо-режим: заявка сформирована, но не отправлена. Укажите адрес обработчика в meta lead-endpoint в index.html.</p>' : '') + '</div>';
   }
   /* Отправка заявки. Пока CONFIG.endpoint пустой, сразу показываем демо-ответ. */
   function send(payload, btn, label, errTarget, onDone) {
     if (!CONFIG.endpoint) { onDone(true); return; }
     var old = label.textContent;
     btn.disabled = true; label.textContent = 'Отправляем…';
-    fetch(CONFIG.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    fetch(CONFIG.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ page: location.href }, payload)) })
       .then(function (r) { if (!r.ok) throw new Error(r.status); onDone(false); })
       .catch(function () {
         btn.disabled = false; label.textContent = old;

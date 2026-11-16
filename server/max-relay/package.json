@@ -1,0 +1,8 @@
+{
+  "name": "max-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Пересылка заявок с лендинга в мессенджер MAX",
+  "main": "index.js",
+  "engines": { "node": ">=18" }
+}
