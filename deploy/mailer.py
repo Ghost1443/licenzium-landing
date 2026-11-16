@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Приём заявок с лендинга и отправка их письмом через SMTP Mail.ru.
+"""Приём заявок с лендинга и доставка их письмом в ящик Mail.ru.
 
+Два способа доставки (переменная DELIVERY в mail.env):
+  imap (по умолчанию)  письмо кладётся прямо во «Входящие» по IMAP (порт 993).
+                       Нужен, пока хостинг закрывает исходящую почту (SMTP).
+  smtp                 обычная отправка через smtp.mail.ru:465.
 Пароль хранится только на сервере, в /etc/licenzium/mail.env (пароль для внешнего приложения Mail.ru).
 Сайт шлёт JSON на /licenzium/api/lead, nginx проксирует сюда, на 127.0.0.1:8010/lead.
 Ответ в формате FormSubmit ({"success": "true"}), поэтому скрипт сайта не нужно менять.
 Только стандартная библиотека Python, ставить ничего не нужно.
 """
+import imaplib
 import json
 import os
 import smtplib
@@ -23,6 +28,10 @@ PASSWORD = os.environ.get("MAIL_PASSWORD", "").strip()
 TO = os.environ.get("MAIL_TO", "").strip() or USER
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.mail.ru")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+DELIVERY = os.environ.get("DELIVERY", "imap").strip().lower()
+IMAP_HOST = os.environ.get("IMAP_HOST", "imap.mail.ru")
+IMAP_PORT = int(os.environ.get("IMAP_PORT", "993"))
+IMAP_FOLDER = os.environ.get("IMAP_FOLDER", "INBOX")
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "8010"))
 ORIGINS = {o.strip() for o in os.environ.get("ALLOWED_ORIGIN", "").split(",") if o.strip()}
 MAX_BODY = 20000
@@ -85,9 +94,23 @@ def build_message(data):
 
 def send(msg):
     ctx = ssl.create_default_context()
-    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=ctx) as smtp:
-        smtp.login(USER, PASSWORD)
-        smtp.send_message(msg)
+    if DELIVERY == "smtp":
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=ctx) as smtp:
+            smtp.login(USER, PASSWORD)
+            smtp.send_message(msg)
+        return
+    # IMAP: кладём письмо во «Входящие» непрочитанным, с текущей датой
+    imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=ctx, timeout=15)
+    try:
+        imap.login(USER, PASSWORD)
+        status, detail = imap.append(IMAP_FOLDER, "", imaplib.Time2Internaldate(time.time()), msg.as_bytes())
+        if status != "OK":
+            raise RuntimeError(f"IMAP APPEND {status}: {detail}")
+    finally:
+        try:
+            imap.logout()
+        except Exception:
+            pass
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -5,6 +5,7 @@ Wants=network-online.target
 
 [Service]
 EnvironmentFile=/etc/licenzium/mail.env
+Environment=TZ=Europe/Moscow
 ExecStart=/usr/bin/python3 /opt/licenzium/mailer.py
 Restart=on-failure
 RestartSec=5
