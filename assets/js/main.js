@@ -242,123 +242,186 @@
 
   renderChips(); renderResults(); renderDecode(); renderList();
 
-  /* Квиз */
+  /* Квиз: один и тот же квиз работает на странице и во всплывающем окне */
   var STEPS = [
     { id: 'task', type: 'radio', title: 'Какая задача сейчас?', opts: ['Получить новую лицензию', 'Добавить виды отходов в действующую', 'Внести изменения в реестр', 'Запускаю перевозки, нужен план'] },
     { id: 'waste', type: 'checkbox', title: 'Что планируете перевозить?', hint: 'Можно выбрать несколько вариантов.', opts: ['ТКО и уборка территорий', 'Жидкие отходы и ил', 'Строительные отходы', 'Отходы автопарка: масла, шины, фильтры', 'Ртутные лампы, аккумуляторы', 'Пока не знаю'], only: 'Пока не знаю' },
     { id: 'fleet', type: 'radio', title: 'Что с транспортом?', opts: ['Есть своя техника', 'Техника в аренде или лизинге', 'Транспорта пока нет'] },
     { id: 'ready', type: 'checkbox', title: 'Что у вас уже готово?', hint: 'Отметьте всё, что есть.', opts: ['Документы о квалификации работников', 'Санитарно-эпидемиологическое заключение', 'Список кодов ФККО', 'Пока ничего'], only: 'Пока ничего' }
   ];
-  var total = STEPS.length + 1;
-  var cur = 0;
-  var form = $('quizForm');
+  var TOTAL = STEPS.length + 1;
 
-  form.innerHTML =
-    '<div class="steps" aria-hidden="true">' + new Array(total + 1).join('<i></i>') + '</div>' +
-    '<p class="step-count" id="stepCount"></p>' +
-    STEPS.map(function (s) {
-      return '<fieldset data-step hidden><legend tabindex="-1">' + s.title + '</legend>' +
-        (s.hint ? '<p class="hint">' + s.hint + '</p>' : '') +
-        '<div class="opts">' + s.opts.map(function (o) {
-          return '<label class="opt' + (s.type === 'radio' ? ' opt--radio' : '') + '"><input type="' + s.type + '" name="' + s.id + '" value="' + o + '"' + (s.only === o ? ' data-only' : '') + '><span class="opt__box">' + (s.type === 'radio' ? '' : icon('check')) + '</span><span>' + o + '</span></label>';
-        }).join('') + '</div><p class="err" role="alert"></p></fieldset>';
-    }).join('') +
-    '<fieldset data-step hidden><legend tabindex="-1">Куда отправить расчёт?</legend>' +
-      '<div class="form-group"><label for="qName">Имя</label><input class="input" id="qName" name="name" autocomplete="name" placeholder="Как к вам обращаться"><p class="err" role="alert"></p></div>' +
-      '<div class="form-group"><label for="qPhone">Телефон</label><input class="input" id="qPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 900 123-45-67"><p class="err" role="alert"></p></div>' +
-      '<input class="hp" type="text" name="company_site" tabindex="-1" autocomplete="off" aria-hidden="true">' +
-      '<p class="attached" id="attached" hidden></p>' +
-      '<div class="form-group"><label class="consent"><input type="checkbox" id="qConsent" name="consent"><span>Согласен на обработку персональных данных для подготовки расчёта</span></label><p class="err" role="alert"></p></div>' +
-    '</fieldset>' +
-    '<div class="wizard__nav"><button class="btn btn--ghost" type="button" id="qBack">' + icon('arrow-left') + '<span>Назад</span></button>' +
-    '<button class="btn btn--gold" type="submit" id="qNext"><span>Далее</span>' + icon('arrow-right') + '</button></div>';
-
-  var sets = form.querySelectorAll('[data-step]');
-  var ticks = form.querySelectorAll('.steps i');
-
-  function showStep(n, focus) {
-    cur = n;
-    sets.forEach(function (f, i) {
-      f.hidden = i !== n;
-      f.classList.toggle('enter', i === n && !!focus);
-    });
-    ticks.forEach(function (t, i) { t.classList.toggle('on', i <= n); });
-    $('stepCount').textContent = n < STEPS.length ? 'Вопрос ' + (n + 1) + ' из ' + STEPS.length : 'Последний шаг';
-    $('qBack').hidden = n === 0;
-    $('qNext').querySelector('span').textContent = n === total - 1 ? 'Получить расчёт' : 'Далее';
-    $('qNext').querySelector('.i').style.display = n === total - 1 ? 'none' : '';
-    if (n === total - 1) {
-      var a = $('attached');
-      a.hidden = state.list.length === 0;
-      a.textContent = 'К заявке приложим ваш список кодов ФККО, позиций: ' + state.list.length + '.';
-    }
-    if (focus) sets[n].querySelector('legend').focus({ preventScroll: true });
+  function phoneOk(v) {
+    var d = v.replace(/\D/g, '');
+    return d.length === 10 || (d.length === 11 && /^[78]/.test(d));
   }
-
-  /* Вариант «пока не знаю» исключает остальные */
-  form.addEventListener('change', function (e) {
-    var t = e.target;
-    if (t.type !== 'checkbox' || t.id === 'qConsent' || !t.checked) return;
-    form.querySelectorAll('input[name="' + t.name + '"]').forEach(function (o) {
-      if (o !== t && (t.hasAttribute('data-only') || o.hasAttribute('data-only'))) o.checked = false;
-    });
-  });
-
   function setErr(el, msg) {
     var p = el.closest('.form-group').querySelector('.err');
     p.textContent = msg;
     if (el.classList.contains('input')) el.setAttribute('aria-invalid', msg ? 'true' : 'false');
     return !msg;
   }
-  function phoneOk(v) {
-    var d = v.replace(/\D/g, '');
-    return d.length === 10 || (d.length === 11 && /^[78]/.test(d));
-  }
-  function validate() {
-    if (cur < STEPS.length) {
-      var chosen = form.querySelector('input[name="' + STEPS[cur].id + '"]:checked');
-      sets[cur].querySelector('.err').textContent = chosen ? '' : 'Выберите вариант, чтобы продолжить.';
-      return !!chosen;
-    }
-    var a = setErr($('qName'), $('qName').value.trim() ? '' : 'Укажите имя.');
-    var b = setErr($('qPhone'), phoneOk($('qPhone').value) ? '' : 'Проверьте номер: нужно 10 цифр после кода страны.');
-    var c = setErr($('qConsent'), $('qConsent').checked ? '' : 'Нужно ваше согласие, чтобы мы могли связаться.');
+  function checkContacts(form) {
+    var a = setErr(form.elements.name, form.elements.name.value.trim() ? '' : 'Укажите имя.');
+    var b = setErr(form.elements.phone, phoneOk(form.elements.phone.value) ? '' : 'Проверьте номер: нужно 10 цифр после кода страны.');
+    var c = setErr(form.elements.consent, form.elements.consent.checked ? '' : 'Нужно ваше согласие, чтобы мы могли связаться.');
     return a && b && c;
   }
-
-  function values(name) {
-    return Array.prototype.map.call(form.querySelectorAll('input[name="' + name + '"]:checked'), function (i) { return i.value; });
-  }
-  function showResult(demo) {
-    $('wizard').innerHTML = '<div class="result" tabindex="-1">' + icon('seal-check') +
-      '<h3>Заявка принята</h3><p>Свяжемся с вами, уточним детали и подготовим расчёт.</p>' +
+  function resultHTML(title, text, demo) {
+    return '<div class="result-msg" tabindex="-1">' + icon('seal-check') + '<h3>' + title + '</h3><p>' + text + '</p>' +
       (demo ? '<p class="demo">Демо-режим: заявка сформирована, но не отправлена. Укажите адрес обработчика в assets/js/main.js.</p>' : '') + '</div>';
-    $('wizard').firstChild.focus({ preventScroll: true });
   }
-  function submit() {
-    if (form.elements.company_site.value) return; /* скрытое поле заполняют только боты */
-    var btn = $('qNext');
-    var label = btn.querySelector('span');
-    var payload = {
-      task: values('task'), waste: values('waste'), fleet: values('fleet'), ready: values('ready'),
-      name: $('qName').value.trim(), phone: $('qPhone').value.trim(),
-      codes: state.list.map(function (c) { return { code: pretty(c), name: byCode(c).name }; })
-    };
-    if (!CONFIG.endpoint) { showResult(true); return; }
+  /* Отправка заявки. Пока CONFIG.endpoint пустой, сразу показываем демо-ответ. */
+  function send(payload, btn, label, errTarget, onDone) {
+    if (!CONFIG.endpoint) { onDone(true); return; }
+    var old = label.textContent;
     btn.disabled = true; label.textContent = 'Отправляем…';
     fetch(CONFIG.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); showResult(false); })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); onDone(false); })
       .catch(function () {
-        btn.disabled = false; label.textContent = 'Отправить ещё раз';
-        setErr($('qConsent'), 'Не удалось отправить заявку. Попробуйте ещё раз или позвоните нам.');
+        btn.disabled = false; label.textContent = old;
+        setErr(errTarget, 'Не удалось отправить заявку. Попробуйте ещё раз или позвоните нам.');
       });
   }
 
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (!validate()) return;
-    if (cur === total - 1) submit(); else showStep(cur + 1, true);
+  var quizCount = 0;
+  function createQuiz(root) {
+    var uid = 'q' + (++quizCount);
+    var cur = 0, done = false, form;
+
+    function render() {
+      done = false; cur = 0;
+      root.innerHTML = '<form novalidate>' +
+        '<div class="steps" aria-hidden="true">' + new Array(TOTAL + 1).join('<i></i>') + '</div>' +
+        '<p class="step-count"></p>' +
+        STEPS.map(function (s) {
+          return '<fieldset data-step hidden><legend tabindex="-1">' + s.title + '</legend>' +
+            (s.hint ? '<p class="hint">' + s.hint + '</p>' : '') +
+            '<div class="opts">' + s.opts.map(function (o) {
+              return '<label class="opt' + (s.type === 'radio' ? ' opt--radio' : '') + '"><input type="' + s.type + '" name="' + s.id + '" value="' + o + '"' + (s.only === o ? ' data-only' : '') + '><span class="opt__box">' + (s.type === 'radio' ? '' : icon('check')) + '</span><span>' + o + '</span></label>';
+            }).join('') + '</div><p class="err" role="alert"></p></fieldset>';
+        }).join('') +
+        '<fieldset data-step hidden><legend tabindex="-1">Куда отправить расчёт?</legend>' +
+          '<div class="form-group"><label for="' + uid + 'n">Имя</label><input class="input" id="' + uid + 'n" name="name" autocomplete="name" placeholder="Как к вам обращаться"><p class="err" role="alert"></p></div>' +
+          '<div class="form-group"><label for="' + uid + 'p">Телефон</label><input class="input" id="' + uid + 'p" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 900 123-45-67"><p class="err" role="alert"></p></div>' +
+          '<input class="hp" type="text" name="company_site" tabindex="-1" autocomplete="off" aria-hidden="true">' +
+          '<p class="attached" hidden></p>' +
+          '<div class="form-group"><label class="consent"><input type="checkbox" name="consent"><span>Согласен на обработку персональных данных для подготовки расчёта</span></label><p class="err" role="alert"></p></div>' +
+        '</fieldset>' +
+        '<div class="wizard__nav"><button class="btn btn--ghost" type="button" data-back>' + icon('arrow-left') + '<span>Назад</span></button>' +
+        '<button class="btn btn--gold" type="submit" data-next><span>Далее</span>' + icon('arrow-right') + '</button></div></form>';
+      form = root.querySelector('form');
+      form.addEventListener('change', onChange);
+      form.addEventListener('submit', onSubmit);
+      form.querySelector('[data-back]').addEventListener('click', function () { show(cur - 1, true); });
+      show(0, false);
+    }
+
+    function show(n, focus) {
+      cur = n;
+      var sets = form.querySelectorAll('[data-step]');
+      var next = form.querySelector('[data-next]');
+      sets.forEach(function (f, i) { f.hidden = i !== n; f.classList.toggle('enter', i === n && !!focus); });
+      form.querySelectorAll('.steps i').forEach(function (t, i) { t.classList.toggle('on', i <= n); });
+      form.querySelector('.step-count').textContent = n < STEPS.length ? 'Вопрос ' + (n + 1) + ' из ' + STEPS.length : 'Последний шаг';
+      form.querySelector('[data-back]').hidden = n === 0;
+      next.querySelector('span').textContent = n === TOTAL - 1 ? 'Получить расчёт' : 'Далее';
+      next.querySelector('.i').style.display = n === TOTAL - 1 ? 'none' : '';
+      if (n === TOTAL - 1) {
+        var a = form.querySelector('.attached');
+        a.hidden = state.list.length === 0;
+        a.textContent = 'К заявке приложим ваш список кодов ФККО, позиций: ' + state.list.length + '.';
+      }
+      if (focus) sets[n].querySelector('legend').focus({ preventScroll: true });
+    }
+
+    /* Вариант «пока не знаю» исключает остальные */
+    function onChange(e) {
+      var t = e.target;
+      if (t.type !== 'checkbox' || t.name === 'consent' || !t.checked) return;
+      form.querySelectorAll('input[name="' + t.name + '"]').forEach(function (o) {
+        if (o !== t && (t.hasAttribute('data-only') || o.hasAttribute('data-only'))) o.checked = false;
+      });
+    }
+
+    function values(name) {
+      return Array.prototype.map.call(form.querySelectorAll('input[name="' + name + '"]:checked'), function (i) { return i.value; });
+    }
+
+    function onSubmit(e) {
+      e.preventDefault();
+      if (cur < STEPS.length) {
+        var chosen = form.querySelector('input[name="' + STEPS[cur].id + '"]:checked');
+        form.querySelectorAll('[data-step]')[cur].querySelector('.err').textContent = chosen ? '' : 'Выберите вариант, чтобы продолжить.';
+        if (chosen) show(cur + 1, true);
+        return;
+      }
+      if (!checkContacts(form) || form.elements.company_site.value) return;
+      var btn = form.querySelector('[data-next]');
+      send({
+        type: 'quiz', task: values('task'), waste: values('waste'), fleet: values('fleet'), ready: values('ready'),
+        name: form.elements.name.value.trim(), phone: form.elements.phone.value.trim(),
+        codes: state.list.map(function (c) { return { code: pretty(c), name: byCode(c).name }; })
+      }, btn, btn.querySelector('span'), form.elements.consent, function (demo) {
+        done = true;
+        root.innerHTML = resultHTML('Заявка принята', 'Свяжемся с вами, уточним детали и подготовим расчёт.', demo);
+        root.firstChild.focus({ preventScroll: true });
+      });
+    }
+
+    render();
+    return { reset: function () { if (done) render(); } };
+  }
+
+  var quizzes = [];
+  document.querySelectorAll('[data-quiz]').forEach(function (el) { quizzes.push({ el: el, q: createQuiz(el) }); });
+
+  /* Всплывающие окна */
+  var callBody = $('callBody');
+  var callTemplate = callBody.innerHTML;
+  function bindCall() {
+    var form = $('callForm');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!checkContacts(form) || form.elements.company_site.value) return;
+      var btn = form.querySelector('button[type="submit"]');
+      send({ type: 'callback', topic: $('callTitle').textContent, name: form.elements.name.value.trim(), phone: form.elements.phone.value.trim() },
+        btn, $('callSubmit'), form.elements.consent, function (demo) {
+          callBody.innerHTML = resultHTML('Спасибо, заявка принята', 'Перезвоним вам в течение нескольких минут.', demo);
+          callBody.firstChild.focus({ preventScroll: true });
+        });
+    });
+  }
+  bindCall();
+
+  function openModal(kind, trigger) {
+    var dlg = $(kind === 'call' ? 'callModal' : 'quizModal');
+    if (typeof dlg.showModal !== 'function') {
+      $(kind === 'call' ? 'contacts' : 'quiz').scrollIntoView();
+      return;
+    }
+    if (kind === 'call') {
+      callBody.innerHTML = callTemplate;
+      bindCall();
+      var title = (trigger && trigger.dataset.callTitle) || 'Заказать звонок';
+      $('callTitle').textContent = title;
+      $('callSubmit').textContent = title;
+    } else {
+      quizzes.forEach(function (x) { if (dlg.contains(x.el)) x.q.reset(); });
+    }
+    setMenu(false);
+    dlg.showModal();
+    document.documentElement.classList.add('modal-open');
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-open]');
+    if (t) { e.preventDefault(); openModal(t.dataset.open, t); }
   });
-  $('qBack').addEventListener('click', function () { showStep(cur - 1, true); });
-  showStep(0, false);
+  document.querySelectorAll('dialog.modal').forEach(function (dlg) {
+    dlg.addEventListener('click', function (e) {
+      if (e.target === dlg || e.target.closest('[data-close]')) dlg.close();
+    });
+    dlg.addEventListener('close', function () { document.documentElement.classList.remove('modal-open'); });
+  });
 })();
