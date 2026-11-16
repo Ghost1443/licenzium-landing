@@ -1,8 +1,8 @@
 (function () {
   'use strict';
 
-  /* Адрес обработчика заявок берётся из <meta name="lead-endpoint"> в index.html.
-     Пока он пустой, формы работают в демо-режиме и заявки никуда не уходят. */
+  /* Куда отправлять заявки: <meta name="lead-endpoint"> в index.html (сейчас FormSubmit, письмо на почту).
+     Если адрес пустой, формы работают в демо-режиме и заявки никуда не уходят. */
   var endpointMeta = document.querySelector('meta[name="lead-endpoint"]');
   var CONFIG = { endpoint: endpointMeta ? endpointMeta.content.trim() : '' };
 
@@ -273,12 +273,35 @@
       (demo ? '<p class="demo">Демо-режим: заявка сформирована, но не отправлена. Укажите адрес обработчика в meta lead-endpoint в index.html.</p>' : '') + '</div>';
   }
   /* Отправка заявки. Пока CONFIG.endpoint пустой, сразу показываем демо-ответ. */
+  /* Письмо собирается из полей с русскими названиями: так его удобно читать в почте. */
+  function toEmail(p) {
+    var o = {
+      _subject: p.type === 'callback' ? 'Заявка с сайта: ' + (p.topic || 'обратный звонок') : 'Заявка с сайта: расчёт стоимости',
+      _template: 'table',
+      _captcha: 'false',
+      'Имя': p.name,
+      'Телефон': p.phone
+    };
+    if (p.task && p.task.length) o['Задача'] = p.task.join(', ');
+    if (p.waste && p.waste.length) o['Отходы'] = p.waste.join(', ');
+    if (p.fleet && p.fleet.length) o['Транспорт'] = p.fleet.join(', ');
+    if (p.ready && p.ready.length) o['Что готово'] = p.ready.join(', ');
+    if (p.codes && p.codes.length) o['Коды ФККО (' + p.codes.length + ')'] = p.codes.map(function (c) { return c.code + ' ' + c.name; }).join('; ');
+    o['Страница'] = location.href;
+    return o;
+  }
+
   function send(payload, btn, label, errTarget, onDone) {
     if (!CONFIG.endpoint) { onDone(true); return; }
     var old = label.textContent;
     btn.disabled = true; label.textContent = 'Отправляем…';
-    fetch(CONFIG.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ page: location.href }, payload)) })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); onDone(false); })
+    fetch(CONFIG.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(toEmail(payload)) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (x) {
+        /* FormSubmit отвечает success: "true" или "false" (строкой) */
+        if (!x.ok || String(x.d.success) !== 'true') throw new Error(x.d.message || 'send failed');
+        onDone(false);
+      })
       .catch(function () {
         btn.disabled = false; label.textContent = old;
         setErr(errTarget, 'Не удалось отправить заявку. Попробуйте ещё раз или позвоните нам.');
